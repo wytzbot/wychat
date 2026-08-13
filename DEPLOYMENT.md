@@ -11,7 +11,7 @@ Add these to Production (and Preview/Development if needed):
 - FIREBASE_PRIVATE_KEY
 - FLW_SECRET_KEY
 - FLW_SECRET_HASH
-- CLEANUP_SECRET
+- CRON_SECRET
 
 Do NOT prefix these with `NEXT_PUBLIC_` and do not place them in browser JavaScript.
 
@@ -36,7 +36,9 @@ Set the webhook secret hash to the same value as `FLW_SECRET_HASH`.
 A verified payment grants a 30-day entitlement. The server is authoritative. Frontend/localStorage cannot upgrade an account.
 
 ## 5. Cleanup
-`vercel.json` schedules `/api/cleanup` hourly. Configure Vercel Cron for the deployment and keep `CLEANUP_SECRET` set.
+`vercel.json` schedules `/api/cleanup` once daily (3am UTC) via Vercel Cron, which calls it with `GET` and an automatic `Authorization: Bearer <CRON_SECRET>` header. Just set `CRON_SECRET` in env vars — don't call this endpoint manually with a different header name.
+
+Note: Vercel's free Hobby plan only allows cron jobs to run once per day — hourly schedules are rejected. If you're on Hobby and want more frequent cleanup, either upgrade to Pro, or point a free external scheduler (e.g. cron-job.org, GitHub Actions on a schedule) at this same URL with the same `Authorization: Bearer` header more often; the endpoint itself doesn't care who calls it as long as the secret matches.
 
 ## 6. Important limitation of hosted payment links
 The supplied hosted links do not inherently know which Firebase account is paying. The strongest account-binding flow is to create a server-generated Flutterwave checkout/session with metadata containing the authenticated UID and plan. If you keep the supplied static hosted links, the webhook/verification flow must require an explicit, authenticated post-payment transaction verification step and must never trust client-provided plan/amount.
