@@ -7,6 +7,7 @@ import { cleanupExpired } from "./storage.js";
 import { startPayment, verifyPayment, getServerSubscription } from "./payments.js";
 import { reportMessage, blockIdentity, subscribeBlocked } from "./moderation.js";
 import { setTyping, clearTyping, subscribeTyping } from "./realtime.js";
+import { pushAvailable, pushEnabled, enablePush, disablePush } from "./messaging.js";
 
 const app=document.querySelector("#app");
 const FREE_ROOM_LIMIT=10;
@@ -125,6 +126,7 @@ function shell(content,opts={}){
     <div class="drawer-foot">
       <button class="secondary" id="themeBtn">Theme: ${themeLabel()}</button>
       ${isStandalone()?"":`<button class="secondary" id="installBtn">Install app</button>`}
+      ${state.user&&pushAvailable()?`<button class="secondary" id="pushBtn">${pushEnabled()?"Notifications: On":"Get reply notifications"}</button>`:""}
       ${state.user?`<button class="secondary" id="drawerLogout">Sign out</button>`:`<a class="primary" href="/signin" data-navlink>Sign in</a>`}
     </div>
   </aside>
@@ -134,7 +136,20 @@ function shell(content,opts={}){
   document.querySelector("#themeBtn").onclick=cycleTheme;
   document.querySelector("#installBtn")?.addEventListener("click",triggerInstall);
   document.querySelector("#drawerLogout")?.addEventListener("click",async()=>{await logout();location.href="/";});
+  document.querySelector("#pushBtn")?.addEventListener("click",async e=>{
+    const btn=e.currentTarget;
+    try{
+      if(pushEnabled()){ await disablePush(); btn.textContent="Get reply notifications"; toast("Notifications turned off.","info"); }
+      else{ await enablePush(); btn.textContent="Notifications: On"; toast("You'll be notified about new replies.","success"); }
+    }catch(err){ toast(err.message||"Couldn't update notifications.","error"); }
+  });
 }
+
+// Foreground pushes (app open + focused): surface as an in-app toast instead
+// of a duplicate OS notification, which the service worker already shows.
+window.addEventListener("wychat:push",e=>{
+  toast(`${e.detail.title}: ${e.detail.body}`,"info");
+});
 // One delegated listener handles the drawer for every render (menu button is replaced by shell() each time).
 document.addEventListener("click",e=>{
   if(e.target.closest("#menu")){document.body.classList.toggle("nav-open");return;}
@@ -166,9 +181,10 @@ function home(){
 }
 
 function signin(){
-  shell(`<section class="auth card"><span class="eyebrow">RECEIVER CONTROL</span><h1>Sign in to WyChat</h1><p>Use a secure email link. No password, Google account, or phone number.</p><input id="email" type="email" autocomplete="email" placeholder="you@example.com"><button class="primary" id="magic">Send secure sign-in link</button><small id="authmsg"></small><div id="freeAd" class="free-ad"><div class="ad-label">ADVERTISEMENT</div><div id="ad-slot"></div></div></section>`,{menu:true});
+  shell(`<section class="auth card">${isStandalone()?"":`<button class="corner-install" id="cornerInstall" aria-label="Install app to device"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="M7 11l5 5 5-5"/><path d="M5 21h14"/></svg>Install app</button>`}<span class="eyebrow">RECEIVER CONTROL</span><h1>Sign in to WyChat</h1><p>Use a secure email link. No password, Google account, or phone number.</p><input id="email" type="email" autocomplete="email" placeholder="you@example.com"><button class="primary" id="magic">Send secure sign-in link</button><small id="authmsg"></small><div id="freeAd" class="free-ad"><div class="ad-label">ADVERTISEMENT</div><div id="ad-slot"></div></div></section>`,{menu:true});
   const stopAd=mountAd(document.querySelector("#ad-slot"));
   window.addEventListener("beforeunload",stopAd,{once:true});
+  document.querySelector("#cornerInstall")?.addEventListener("click",triggerInstall);
   document.querySelector("#magic").onclick=async()=>{
     try{
       const email=document.querySelector("#email").value.trim();
@@ -293,7 +309,15 @@ async function roomPage(key){
     clearTimeout(state.typingTimer); clearTyping(room.roomId,state.participant).catch(()=>{});
     const optimistic={messageId:"local-"+clientId,participantId:state.participant,content,quotedMessageId:q?.messageId,quoteSnapshot:q?{participantId:q.participantId,content:q.content}:null,createdAt:null};
     state.messages.set(optimistic.messageId,optimistic);renderMessages();
-    try{await sendMessage(room.roomId,state.participant,content,q,clientId,retentionDays);state.messages.delete(optimistic.messageId);renderMessages();}
+    try{
+      const ref=await sendMessage(room.roomId,state.participant,content,q,clientId,retentionDays);
+      state.messages.delete(optimistic.messageId);renderMessages();
+      // Fire-and-forget: ping the room owner's device. Never blocks sending and
+      // never surfaces an error to the sender if it fails.
+      if(!isOwner){
+        fetch("/api/notify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({roomId:room.roomId,messageId:ref.id})}).catch(()=>{});
+      }
+    }
     catch(err){const el=document.querySelector("#m-local-"+clientId);if(el)el.classList.add("failed");input.value=content;toast("Couldn't send your message. Check your connection and try again.","error");}
   });
 }

@@ -1,10 +1,50 @@
-const CACHE = "wychat-shell-v2";
+const CACHE = "wychat-shell-v3";
 const ASSETS = [
   "/", "/index.html", "/styles.css", "/app.js", "/firebase.js", "/auth.js",
   "/rooms.js", "/messages.js", "/realtime.js", "/storage.js", "/moderation.js",
-  "/subscription.js", "/payments.js", "/router.js", "/manifest.json",
+  "/subscription.js", "/payments.js", "/router.js", "/messaging.js", "/manifest.json",
   "/icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/favicon.ico"
 ];
+
+// --- Background push (Firebase Cloud Messaging) ---
+// Loaded as "compat" scripts because service workers can't use bare ES module
+// imports the way app.js does. This lets the SW show a native OS notification
+// for pushes that arrive while WyChat isn't in the foreground.
+importScripts("https://www.gstatic.com/firebasejs/12.1.0/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/12.1.0/firebase-messaging-compat.js");
+
+firebase.initializeApp({
+  apiKey: "AIzaSyCFQ9eljuHD22tgPRvnzmJqYhXvPHGdoPE",
+  authDomain: "wychat.firebaseapp.com",
+  projectId: "wychat",
+  storageBucket: "wychat.firebasestorage.app",
+  messagingSenderId: "391750518125",
+  appId: "1:391750518125:web:fea89b402190a614e98664"
+});
+
+const fcm = firebase.messaging();
+fcm.onBackgroundMessage(payload => {
+  const title = payload.notification?.title || "WyChat";
+  const body = payload.notification?.body || "You have a new message.";
+  self.registration.showNotification(title, {
+    body,
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    data: { url: payload.data?.url || "/" }
+  });
+});
+
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const url = e.notification.data?.url || "/";
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+      const existing = list.find(c => c.url.includes(location.origin));
+      if (existing) return existing.focus().then(c => c.navigate ? c.navigate(url) : c);
+      return self.clients.openWindow(url);
+    })
+  );
+});
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
