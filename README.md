@@ -45,7 +45,7 @@ No entitlement is ever granted client-side from the redirect alone — only a ve
 
 ## Icons
 
-All app icons are standalone files at the project root (`icon.svg`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `apple-touch-icon.png`, `favicon.ico`) — not inside a subfolder — so `index.html`, `manifest.json`, and `sw.js` all reference `/icon-*.png` directly.
+All app icons are standalone files inside `public/` (`icon.svg`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `apple-touch-icon.png`, `favicon.ico`) — not inside a further subfolder — so `index.html`, `manifest.json`, and `sw.js` all reference `/icon-*.png` directly (Vercel serves everything in `public/` at the site root).
 
 ## Production wiring
 Firebase Admin auth, server-side Flutterwave verification, webhook handling, admin authorization, server subscription reads, duplicate transaction protection, cleanup cron, and Vercel security headers are included. See `DEPLOYMENT.md`. `vercel.json` also includes the SPA rewrite so deep links like `/q/:id` and `/pricing` don't 404 on refresh.
