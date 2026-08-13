@@ -1,0 +1,17 @@
+{
+  "name": "WyChat — Talk freely. Stay anonymous.",
+  "short_name": "WyChat",
+  "description": "Create an anonymous question room, share the link, and get honest replies without revealing who's talking.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#11102b",
+  "theme_color": "#373080",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
