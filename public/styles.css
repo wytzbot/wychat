@@ -25,6 +25,14 @@ body.nav-open .drawer{transform:translateX(0)}
 .drawer nav a{padding:12px 10px;border-radius:12px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;justify-content:space-between}
 .drawer nav a:active{background:var(--bg)}
 .drawer-foot{display:flex;flex-direction:column;gap:10px;padding-top:14px;border-top:1px solid var(--border)}
+.switch-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--border);font-weight:700;font-size:14px}
+.switch{display:inline-flex}.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch-track{width:42px;height:25px;border-radius:999px;background:var(--border);position:relative;transition:background .18s}
+.switch-thumb{position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0003;transition:transform .18s}
+.switch input:checked+.switch-track{background:var(--primary)}
+.switch input:checked+.switch-track .switch-thumb{transform:translateX(17px)}
+.switch input:disabled+.switch-track{opacity:.5}
+.switch input:focus-visible+.switch-track{outline:2px solid var(--violet);outline-offset:2px}
 .plan-pill{font-size:9px;font-weight:900;letter-spacing:.08em;padding:3px 7px;border-radius:99px;background:var(--bg);color:var(--muted);border:1px solid var(--border)}
 .plan-pill[data-plan=starter],.plan-pill[data-plan=pro]{background:var(--primary);color:#fff;border-color:transparent}
 
