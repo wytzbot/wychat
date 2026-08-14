@@ -58,7 +58,7 @@ export function subscribeMessages(roomId, cb) {
  * SEND MESSAGE
  *
  * Messages expire with the ROOM.
- * WyChat rooms are currently fixed at 3 days.
+ * WyChat rooms use 3 days on Free and 10 days on paid plans.
  *
  * The expiry is calculated from the room's creation time,
  * NOT from the time the message was sent.
@@ -93,7 +93,7 @@ export async function sendMessage(
 
   /*
    * Every message expires when the room expires.
-   * Default = 3 days.
+   * Default = 3 days; paid rooms may use 10 days.
    */
   const expiresAt = new Date(
     roomCreatedAtMs + retentionDays * 86400000
