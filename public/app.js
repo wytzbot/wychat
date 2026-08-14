@@ -304,7 +304,7 @@ async function roomPage(key){
       const when=m.createdAt?.toDate?m.createdAt.toDate():new Date();
       const dayKey=when.toDateString();
       if(dayKey!==lastDay){ html+=`<div class="day-divider"><span>${dayLabel(when)}</span></div>`; lastDay=dayKey; }
-      html+=`<article class="msg" id="m-${m.messageId}"><div class="bubble"><b>${esc(m.participantId)}</b>${m.quotedMessageId?`<div class="quoted">\u21B3 ${esc(m.quoteSnapshot?.participantId)} "${esc(m.quoteSnapshot?.content)}"</div>`:""}<p>${esc(m.content)}</p><div class="meta">${m.edited?"edited · ":""}${m.createdAt?.toDate?when.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"sending"} · <button data-quote="${m.messageId}">Quote</button> <button data-report="${m.messageId}">Report</button>${m.participantId===state.participant?` <button data-edit="${m.messageId}">Edit</button> <button data-del="${m.messageId}">Delete</button>`:""}${isOwner&&m.participantId!==state.participant?` <button class="block-btn" data-block="${esc(m.participantId)}">Block</button>`:""}</div></div></article>`;
+      html+=`<article class="msg" id="m-${m.messageId}"><div class="bubble${m.unconfirmed?" unconfirmed":""}"><b>${esc(m.participantId)}</b>${m.quotedMessageId?`<div class="quoted">\u21B3 ${esc(m.quoteSnapshot?.participantId)} "${esc(m.quoteSnapshot?.content)}"</div>`:""}<p>${esc(m.content)}</p><div class="meta">${m.edited?"edited · ":""}${m.createdAt?.toDate?when.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):(m.unconfirmed?"not confirmed — will appear once reconnected":"sending")} · <button data-quote="${m.messageId}">Quote</button> <button data-report="${m.messageId}">Report</button>${m.participantId===state.participant?` <button data-edit="${m.messageId}">Edit</button> <button data-del="${m.messageId}">Delete</button>`:""}${isOwner&&m.participantId!==state.participant?` <button class="block-btn" data-block="${esc(m.participantId)}">Block</button>`:""}</div></div></article>`;
     }
     conv.innerHTML=html||`<div class="empty"><h2>No opinions yet \u{1F440}</h2><small>Share your link and let the conversation begin.</small></div>`;
     conv.querySelectorAll("[data-quote]").forEach(b=>b.onclick=()=>{const m=state.messages.get(b.dataset.quote);state.quote=m;const q=document.querySelector("#quote");q.classList.remove("hidden");q.innerHTML=`\u21B3 <b>${esc(m.participantId)}</b> "${esc(m.content.slice(0,180))}" <button id="clearq">\u00D7</button>`;document.querySelector("#message")?.focus();});
@@ -357,9 +357,19 @@ async function roomPage(key){
     state.messages.set(optimistic.messageId,optimistic);renderMessages();
     try{
       const ref=await sendMessage(room.roomId,state.participant,content,q,clientId,roomCreatedAtMs,retentionDays);
-      // Don't delete the optimistic echo here — the realtime listener above
-      // swaps it out (matched by clientId) once the confirmed doc arrives.
-      // Deleting it eagerly risked the message vanishing if the listener lagged.
+      console.log("sendMessage: write acknowledged by Firestore, doc id",ref.id,"— waiting for realtime listener to confirm it back...");
+      // The write succeeded, but don't delete the optimistic echo here — the
+      // realtime listener above swaps it out (matched by clientId) once the
+      // confirmed doc arrives. If that never happens within a few seconds
+      // (e.g. the listener query is broken), flag it instead of leaving it
+      // silently stuck on "sending" forever.
+      setTimeout(()=>{
+        if(state.messages.has(optimistic.messageId)){
+          console.warn("Message",ref.id,"was written to Firestore but never came back through the realtime listener. This usually means the Firestore composite index for the messages query isn't built yet — check Firebase Console → Firestore → Indexes.");
+          optimistic.unconfirmed=true;
+          renderMessages();
+        }
+      },8000);
       if(!isOwner){
         fetch("/api/notify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({roomId:room.roomId,messageId:ref.id})})
           .then(r=>r.json()).then(d=>console.log("notify:",d)).catch(()=>{});
