@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f8f6ff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#11102b" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="WyChat — Talk freely. Stay anonymous.">
+
+  <!-- Manifest + icons: standalone files at the site root -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+  <!-- Native app-shell behavior when installed / on iOS home screen -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WyChat">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="color-scheme" content="light dark">
+
+  <title>WyChat — Talk freely. Stay anonymous.</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="app"><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font:15px system-ui,sans-serif;color:#888">Loading WyChat…</div></div>
+<script type="module">
+  // app.js (and firebase.js, which it imports) load several scripts live
+  // from a CDN. A single transient network blip used to abort the whole
+  // module before anything rendered, leaving a permanently blank page.
+  // This retries a few times and, only if it truly can't load, shows a
+  // visible retry option instead of silence.
+  async function boot(attempt = 1) {
+    try {
+      await import("/app.js");
+    } catch (e) {
+      console.error("WyChat failed to load (attempt " + attempt + ")", e);
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 500 * attempt));
+        return boot(attempt + 1);
+      }
+      const app = document.querySelector("#app");
+      if (app) {
+        app.innerHTML =
+          '<div style="display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;min-height:100vh;font:15px system-ui,sans-serif;text-align:center;padding:24px">' +
+          "<p>WyChat couldn&#39;t load. This is usually a temporary connection issue.</p>" +
+          '<button id="wychat-retry-btn" style="padding:10px 20px;border-radius:8px;border:none;background:#5b4fe0;color:#fff;font-size:15px;cursor:pointer">Try again</button>' +
+          "</div>";
+        document.getElementById("wychat-retry-btn")?.addEventListener("click", () => location.reload());
+      }
+    }
+  }
+  boot();
+</script>
+</body>
+</html>
