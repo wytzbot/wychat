@@ -137,7 +137,7 @@ function shell(content,opts={}){
     <div class="drawer-foot">
       <button class="secondary" id="themeBtn">Theme: ${themeLabel()}</button>
       ${isStandalone()?"":`<button class="secondary" id="installBtn">Install app</button>`}
-      ${state.user&&pushAvailable()?`<button class="secondary" id="pushBtn">${pushEnabled()?"Notifications: On":"Get reply notifications"}</button>`:""}
+      ${state.user&&pushAvailable()?`<label class="switch-row" id="pushRow"><span>Reply notifications</span><span class="switch"><input type="checkbox" id="pushToggle" ${pushEnabled()?"checked":""}><span class="switch-track"><span class="switch-thumb"></span></span></span></label>`:""}
       ${state.user?`<button class="secondary" id="drawerLogout">Sign out</button>`:`<a class="primary" href="/signin" data-navlink>Sign in</a>`}
     </div>
   </aside>
@@ -147,12 +147,23 @@ function shell(content,opts={}){
   document.querySelector("#themeBtn").onclick=cycleTheme;
   document.querySelector("#installBtn")?.addEventListener("click",triggerInstall);
   document.querySelector("#drawerLogout")?.addEventListener("click",async()=>{await logout();location.href="/";});
-  document.querySelector("#pushBtn")?.addEventListener("click",async e=>{
-    const btn=e.currentTarget;
+  document.querySelector("#pushToggle")?.addEventListener("change",async e=>{
+    const box=e.currentTarget;
+    box.disabled=true;
     try{
-      if(pushEnabled()){ await disablePush(); btn.textContent="Get reply notifications"; toast("Notifications turned off.","info"); }
-      else{ await enablePush(); btn.textContent="Notifications: On"; toast("You'll be notified about new replies.","success"); }
-    }catch(err){ toast(err.message||"Couldn't update notifications.","error"); }
+      if(box.checked){
+        await enablePush();
+        toast("You'll be notified about new replies.","success");
+      }else{
+        await disablePush();
+        toast("Notifications turned off.","info");
+      }
+    }catch(err){
+      box.checked=!box.checked; // revert the toggle if the change failed
+      toast(err.message||"Couldn't update notifications.","error");
+    }finally{
+      box.disabled=false;
+    }
   });
 }
 
@@ -201,7 +212,7 @@ function signin(){
       const email=document.querySelector("#email").value.trim();
       if(!email)throw new Error("Enter your email address.");
       await sendMagicLink(email);
-      document.querySelector("#authmsg").textContent="Check your email — your WyChat link is on the way.";
+      document.querySelector("#authmsg").textContent="Check your email — your WyChat link is on the way. Not there in a minute? Check your spam/junk folder and mark it \u201Cnot spam\u201D so future ones land in your inbox.";
     }catch(e){document.querySelector("#authmsg").textContent=e.message;}
   };
 }
@@ -266,7 +277,12 @@ async function roomPage(key){
   const conv=document.querySelector("#conversation");
   state.unsubscribe?.();
   state.unsubscribe=subscribeMessages(room.roomId,(changes,_,err)=>{
-    if(err){conv.innerHTML=`<div class="error">Couldn't load messages. Check your connection and try again.</div>`;return;}
+    if(err){
+      console.error("subscribeMessages error:",err.code||err,err.message||"");
+      conv.innerHTML=`<div class="error">Couldn't load messages (${esc(err.code||"unknown error")}). <button id="retryLoad" class="secondary">Retry</button></div>`;
+      document.querySelector("#retryLoad")?.addEventListener("click",()=>roomPage(key));
+      return;
+    }
     changes?.forEach(ch=>{
       if(ch.type==="removed"){state.messages.delete(ch.doc.id);return;}
       const data=ch.doc.data();
@@ -345,7 +361,8 @@ async function roomPage(key){
       // swaps it out (matched by clientId) once the confirmed doc arrives.
       // Deleting it eagerly risked the message vanishing if the listener lagged.
       if(!isOwner){
-        fetch("/api/notify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({roomId:room.roomId,messageId:ref.id})}).catch(()=>{});
+        fetch("/api/notify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({roomId:room.roomId,messageId:ref.id})})
+          .then(r=>r.json()).then(d=>console.log("notify:",d)).catch(()=>{});
       }
     }
     catch(err){const el=document.querySelector("#m-local-"+clientId);if(el)el.classList.add("failed");input.value=content;toast("Couldn't send your message. Check your connection and try again.","error");}
