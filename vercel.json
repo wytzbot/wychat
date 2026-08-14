@@ -6,7 +6,7 @@
     },
     {
       "source": "/((?!api/|.*\\..*).*)",
-      "destination": "/public/index.html"
+      "destination": "/public"
     },
     {
       "source": "/(.*\\..*)",
