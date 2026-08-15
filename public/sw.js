@@ -1,4 +1,4 @@
-const CACHE = "wychat-shell-v5-fast-start";
+const CACHE = "wychat-shell-v6-starter-pro";
 const ASSETS = [
   "/", "/index.html", "/styles.css", "/app.js", "/firebase.js", "/auth.js",
   "/rooms.js", "/messages.js", "/realtime.js", "/storage.js", "/moderation.js",
