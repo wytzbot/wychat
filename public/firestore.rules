@@ -1,90 +1,169 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function owner(uid) { return signedIn() && request.auth.uid == uid; }
-    function room(roomId) { return get(/databases/$(database)/documents/rooms/$(roomId)); }
-    function roomExists(roomId) { return exists(/databases/$(database)/documents/rooms/$(roomId)); }
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function roomExists(roomId) {
+      return exists(
+        /databases/$(database)/documents/rooms/$(roomId)
+      );
+    }
+
+    function room(roomId) {
+      return get(
+        /databases/$(database)/documents/rooms/$(roomId)
+      );
+    }
 
     function isRoomOwner(roomId) {
-      return signedIn() && roomExists(roomId)
+      return signedIn()
+        && roomExists(roomId)
         && room(roomId).data.ownerUid == request.auth.uid;
     }
 
     function freeTierLocked() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.freeTierLocked == true;
+      return signedIn()
+        && exists(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        )
+        && get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.freeTierLocked == true;
     }
 
     function validRetention(data) {
-      return data.retentionDays == 3 || data.retentionDays == 7 || data.retentionDays == 10;
+      return data.retentionDays == 3
+        || data.retentionDays == 7
+        || data.retentionDays == 10;
     }
 
-    // Legacy rooms created before the retention change may still be 30 or 90 days.
-    // They remain readable until their original expiry. New room creation never
-    // accepts these values.
     function readableRetention(data) {
-      return validRetention(data) || data.retentionDays == 30 || data.retentionDays == 90;
+      return validRetention(data)
+        || data.retentionDays == 30
+        || data.retentionDays == 90;
     }
 
     function roomIsLive(roomId) {
       return roomExists(roomId)
         && room(roomId).data.status == "live"
         && readableRetention(room(roomId).data)
-        && request.time < room(roomId).data.createdAt
-          + duration.value(room(roomId).data.retentionDays, "d");
+        && request.time <
+          room(roomId).data.createdAt +
+          duration.value(room(roomId).data.retentionDays, "d");
     }
 
+
+    // =========================
+    // USERS
+    // =========================
+
     match /users/{uid} {
+
       allow read: if owner(uid);
+
       allow create: if owner(uid);
+
       allow update: if owner(uid)
         && request.resource.data.plan == resource.data.plan
-        && request.resource.data.subscriptionStatus == resource.data.subscriptionStatus
-        && request.resource.data.subscriptionExpiresAt == resource.data.subscriptionExpiresAt;
+        && request.resource.data.subscriptionStatus ==
+           resource.data.subscriptionStatus
+        && request.resource.data.subscriptionExpiresAt ==
+           resource.data.subscriptionExpiresAt;
+
       allow delete: if false;
     }
+
+
+    // =========================
+    // PAYMENTS
+    // =========================
 
     match /payments/{id} {
       allow read, write: if false;
     }
 
+
+    // =========================
+    // ROOMS
+    // =========================
+
     match /rooms/{roomId} {
+
+      // Anyone needs to be able to discover/join a room.
       allow read: if true;
 
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid
         && validRetention(request.resource.data)
         && (
-          (request.resource.data.plan == "free"
+          (
+            request.resource.data.plan == "free"
             && request.resource.data.retentionDays == 3
             && request.resource.data.slug == ""
-            && !freeTierLocked())
+            && !freeTierLocked()
+          )
           ||
-          (request.resource.data.plan == "starter"
+          (
+            request.resource.data.plan == "starter"
             && request.resource.data.retentionDays == 7
-            && request.resource.data.slug == "")
+            && request.resource.data.slug == ""
+          )
           ||
-          (request.resource.data.plan == "pro"
-            && request.resource.data.retentionDays == 10)
+          (
+            request.resource.data.plan == "pro"
+            && request.resource.data.retentionDays == 10
+          )
         );
 
       allow update, delete: if signedIn()
         && resource.data.ownerUid == request.auth.uid;
 
+
+      // =========================
+      // BLOCKED USERS
+      // =========================
+
       match /blocked/{participantId} {
+
         allow read: if true;
-        allow write: if isRoomOwner(roomId);
+
+        allow create, update, delete: if isRoomOwner(roomId);
       }
 
+
+      // =========================
+      // VIEWERS
+      // =========================
+
       match /viewers/{viewerId} {
+
+        // Anonymous participants don't need to write
+        // to this collection.
         allow read, write: if false;
       }
     }
 
+
+    // =========================
+    // MESSAGES
+    // =========================
+
     match /messages/{messageId} {
+
+      // IMPORTANT:
+      // On a normal document read, resource.data exists.
       allow read: if roomIsLive(resource.data.roomId);
 
+
+      // Anonymous users can send messages to live rooms.
       allow create: if roomIsLive(request.resource.data.roomId)
         && request.resource.data.content is string
         && request.resource.data.content.size() > 0
@@ -94,30 +173,66 @@ service cloud.firestore {
         && request.resource.data.participantId.size() <= 24
         && request.resource.data.edited == false;
 
+
+      // Message owner can edit their message.
       allow update: if roomIsLive(resource.data.roomId)
-        && resource.data.participantId == request.resource.data.participantId
-        && request.resource.data.roomId == resource.data.roomId
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.quotedMessageId == resource.data.quotedMessageId
+        && resource.data.participantId ==
+           request.resource.data.participantId
+        && request.resource.data.roomId ==
+           resource.data.roomId
+        && request.resource.data.createdAt ==
+           resource.data.createdAt
+        && request.resource.data.quotedMessageId ==
+           resource.data.quotedMessageId
         && request.resource.data.content is string
         && request.resource.data.content.size() > 0
         && request.resource.data.content.size() <= 2000;
 
+
+      // Keep deletion open because the client may delete
+      // expired messages.
       allow delete: if true;
     }
 
+
+    // =========================
+    // REPORTS
+    // =========================
+
     match /reports/{reportId} {
+
       allow create: if request.resource.data.reason is string
         && request.resource.data.reason.size() > 0
         && request.resource.data.reason.size() <= 200;
+
       allow read, update, delete: if false;
     }
 
+
+    // =========================
+    // TYPING INDICATORS
+    // =========================
+
     match /typing/{roomId}/users/{participantId} {
+
       allow read: if roomIsLive(roomId);
-      allow write: if roomIsLive(roomId)
+
+      // CREATE / UPDATE
+      allow create, update: if roomIsLive(roomId)
         && request.resource.data.participantId == participantId;
+
+      // DELETE IS SEPARATE.
+      //
+      // request.resource does NOT exist during delete,
+      // so checking request.resource.data here causes
+      // "Missing or insufficient permissions".
+      allow delete: if roomIsLive(roomId);
     }
+
+
+    // =========================
+    // DENY EVERYTHING ELSE
+    // =========================
 
     match /{document=**} {
       allow read, write: if false;
