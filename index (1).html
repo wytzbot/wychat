@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f8f6ff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#11102b" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="WyChat — Talk freely. Stay anonymous.">
+
+  <!-- Manifest + icons: standalone files at the site root -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+  <!-- Native app-shell behavior when installed / on iOS home screen -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WyChat">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="color-scheme" content="light dark">
+
+  <title>WyChat — Talk freely. Stay anonymous.</title>
+  <link rel="stylesheet" href="/styles.css">
+  <!-- Warm up connections to the CDN/APIs app.js needs, so the actual
+       requests (once the module runs) skip DNS/TLS negotiation. -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+  <link rel="modulepreload" href="/app.js">
+<style>
+  .instant-shell{min-height:100vh;background:#f8f6ff}
+  .instant-shell header{display:flex;align-items:center;justify-content:space-between;padding:24px 28px;border-bottom:1px solid rgba(30,25,60,.08)}
+  .instant-shell .brand{font-weight:800;font-size:26px;color:#211d3b;text-decoration:none}
+  .instant-menu{font-size:27px;color:#211d3b}
+  .instant-shell .hero{max-width:760px;margin:0 auto;padding:72px 28px 40px}
+  .instant-shell .hero h1{margin:10px 0 18px}
+  .instant-shell .hero p{max-width:600px}
+  .instant-button{display:inline-block;opacity:.85}
+  @media(max-width:600px){.instant-shell .hero{padding:54px 24px 30px}.instant-shell header{padding:20px 22px}}
+</style>
+</head>
+<body>
+<div id="offline-banner" role="status" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#3a3560;color:#fff;font:600 13px system-ui,sans-serif;text-align:center;padding:8px 12px;">You're offline — messages will send once you're back online.</div>
+<script>
+  // Lives outside app.js's render cycle so it keeps working even if a
+  // route re-render is mid-flight, and shows correct state immediately
+  // on load rather than only after the first online/offline event fires.
+  (function(){
+    const b=document.getElementById("offline-banner");
+    function sync(){ b.style.display = navigator.onLine ? "none" : "block"; }
+    window.addEventListener("online",sync);
+    window.addEventListener("offline",sync);
+    sync();
+  })();
+</script>
+<div id="app"></div>
+<script>
+  // Route-aware instant paint: a room link (/q/...) must never flash the
+  // marketing homepage while app.js loads — that looked like a stuck
+  // "create your own room" screen. Pick the right skeleton synchronously,
+  // before the browser paints, so there's no wrong-page flash either way.
+  (function(){
+    var isRoom=/^\/q\//.test(location.pathname);
+    var app=document.getElementById("app");
+    app.innerHTML = isRoom
+      ? '<div class="instant-shell"><header><a class="brand" href="/">WyChat</a><span class="instant-menu" aria-hidden="true">\u2630</span></header><main class="page-enter in"><section class="roomtop" style="max-width:850px;margin:auto"><a href="/" class="back">\u2039</a><div><span class="eyebrow">ANONYMOUS ROOM</span><h1 style="opacity:.5">Opening room\u2026</h1></div></section></main></div>'
+      : '<div class="instant-shell"><header><a class="brand" href="/">WyChat</a><span class="instant-menu" aria-hidden="true">\u2630</span></header><main class="page-enter in"><section class="hero"><span class="eyebrow">PRIVATE BY DESIGN</span><h1>Talk freely.<br><em>Stay anonymous.</em></h1><p>Create a question, share your link, and let people give honest opinions without revealing who they are.</p><div class="actions"><span class="primary instant-button">Create your anonymous room</span><span class="secondary instant-button">How it works</span></div></section></main></div>';
+  })();
+</script>
+<script type="module">
+  // app.js (and firebase.js, which it imports) load several scripts live
+  // from a CDN. A single transient network blip used to abort the whole
+  // module before anything rendered, leaving a permanently blank page.
+  // This retries a few times and, only if it truly can't load, shows a
+  // visible retry option instead of silence.
+  async function boot(attempt = 1) {
+    try {
+      // Cache-bust every retry — re-importing the exact same URL just
+      // replays a cached failure instead of actually trying again.
+      await import(attempt === 1 ? "/app.js" : "/app.js?retry=" + attempt);
+    } catch (e) {
+      console.error("WyChat failed to load (attempt " + attempt + ")", e);
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 500 * attempt));
+        return boot(attempt + 1);
+      }
+      const app = document.querySelector("#app");
+      if (app) {
+        const detail = (e && (e.message || String(e))) || "Unknown error";
+        app.innerHTML =
+          '<div style="display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;min-height:100vh;font:15px system-ui,sans-serif;text-align:center;padding:24px">' +
+          "<p>WyChat couldn&#39;t load.</p>" +
+          '<p style="font-size:12px;color:#888;max-width:320px;word-break:break-word">' + detail.replace(/</g,"&lt;") + '</p>' +
+          '<button id="wychat-retry-btn" style="padding:10px 20px;border-radius:8px;border:none;background:#5b4fe0;color:#fff;font-size:15px;cursor:pointer">Try again</button>' +
+          "</div>";
+        document.getElementById("wychat-retry-btn")?.addEventListener("click", () => location.reload());
+      }
+    }
+  }
+  boot();
+</script>
+</body>
+</html>
